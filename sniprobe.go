@@ -126,6 +126,12 @@ func main() {
 	flag.Parse()
 	goflag.CommandLine.Parse([]string{}) // workaround for https://github.com/golang/glog/commit/fca8c8854093a154ff1eb580aae10276ad6b1b5f to set parsed bit.
 
+	url := &url.URL{
+		Scheme: "https",
+		Host:   *connect, // host to connect to
+		Path:   *path,
+	}
+
 	if len(*src) != 0 {
 		u, err := url.Parse(*src)
 		if err != nil {
@@ -133,6 +139,7 @@ func main() {
 		}
 		*host = u.Host
 		*path = u.Path
+		url = u
 	}
 
 	if len(*host) == 0 {
@@ -147,12 +154,8 @@ func main() {
 	client := newClient(host, *useProxy)
 	request := &http.Request{
 		Method: "GET", // default
-		URL: &url.URL{
-			Scheme: "https",
-			Host:   *connect, // host to connect to
-			Path:   *path,
-		},
-		Host: *host, // Host: header
+		URL:    url,
+		Host:   *host, // Host: header
 	}
 	glog.V(2).Infof("Request: %+v", request)
 	resp, err := client.Do(request)
@@ -169,14 +172,15 @@ func main() {
 		fmt.Printf("%s", body)
 	}
 
-	cert := resp.TLS.PeerCertificates[0]
-	glog.Infof("Certificate CommonName: %s\n", cert.Subject.CommonName)
+	if url.Scheme == "https" {
+		cert := resp.TLS.PeerCertificates[0]
+		glog.Infof("Certificate CommonName: %s\n", cert.Subject.CommonName)
 
-	err = checkCert(cert, host)
-	if err != nil {
-		exit(CRITICAL, err)
+		err = checkCert(cert, host)
+		if err != nil {
+			exit(CRITICAL, err)
+		}
 	}
-
 	if len(*dest) > 0 {
 		loc, err := resp.Location()
 		if err != nil {
