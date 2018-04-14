@@ -154,11 +154,12 @@ func main() {
 		},
 		Host: *host, // Host: header
 	}
+	glog.V(2).Infof("Request: %+v", request)
 	resp, err := client.Do(request)
 	if err != nil {
 		exitF(CRITICAL, "http client error: %v", err)
 	}
-
+	glog.V(2).Infof("Response: %+v", resp)
 	body, err := ioutil.ReadAll(resp.Body)
 	resp.Body.Close()
 	if err != nil {
