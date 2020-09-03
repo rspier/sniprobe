@@ -28,6 +28,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"net"
 	"os"
 	"regexp"
@@ -80,6 +81,7 @@ var (
 	useProxy = flag.Bool("proxy", false, "Use HAPRoxy protocol")
 	src      = flag.StringP("src", "", "", "source URL")
 	dest     = flag.StringP("dest", "", "", "dest URL")
+	maxAge   = flag.DurationP("maxage", "M", 0, "max age of result")
 )
 
 func noRedirect(req *http.Request, via []*http.Request) error {
@@ -196,6 +198,11 @@ func main() {
 		exit(CRITICAL, err)
 	}
 
+	err = checkFresh(resp.Header, *maxAge)
+	if err != nil {
+		exit(CRITICAL, err)
+	}
+
 	if resp.StatusCode != *status {
 		exitF(CRITICAL, "wrong status code: got %d, want %d", resp.StatusCode, *status)
 	}
@@ -262,4 +269,29 @@ func checkCert(cert *x509.Certificate, host *string) error {
 	}
 
 	return fmt.Errorf("Cert CN != hostname: want %s, got %s", cert.Subject.CommonName, *host)
+}
+
+func checkFresh(hs http.Header, max time.Duration) error {
+	if max == 0 {
+		return nil
+	}
+	lm := hs.Get("Last-Modified")
+	if lm == "" {
+		return errors.New("no Last-Modified header")
+	}
+	lmt, err := time.Parse(time.RFC1123, lm)
+	if err != nil {
+		return err
+	}
+
+	sd := hs.Get("Date")
+	sdt, err := time.Parse(time.RFC1123, sd)
+	if err != nil {
+		sdt = time.Now()
+	}
+	ago := sdt.Sub(lmt)
+	if ago > max {
+		return fmt.Errorf("modifed %v ago > %v", ago, max)
+	}
+	return nil
 }
